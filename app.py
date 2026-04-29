@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session
-import sqlite3, os, json
+import sqlite3, os
 from functools import wraps
 
 app = Flask(__name__)
@@ -7,7 +7,6 @@ app.secret_key = os.environ.get('SECRET_KEY', 'ffl-sustainability-2026-secret')
 DB_PATH = os.environ.get('DB_PATH', 'ffl.db')
 EDIT_PASSWORD = os.environ.get('EDIT_PASSWORD', 'FFL2030')
 
-# ── DB helpers ──────────────────────────────────────────────────────────────
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -43,10 +42,8 @@ def init_db():
         water_intensity REAL, energy_intensity REAL, carbon_per_kg REAL
     );
     """)
-    # Seed brands
     for bid, name, color in [('hm','H&M','#e63946'),('ca','C&A','#f77f00'),('inditex','Inditex','#2a9d8f')]:
         c.execute("INSERT OR IGNORE INTO brands(bid,name,color) VALUES(?,?,?)", (bid, name, color))
-    # Seed monthly data
     seed = [
         ('2025-01','Jan 2025',2025,1,1,1660264,1199577,21883,438804,48847000,35000000,2000000,11847000,2953,2263,690,60.46,1.779,134968,100000,5000,29968,81.3,306294,21.1,0,937467,1143863,18537,4241,None,None,None,None,None,None,None,1),
         ('2025-02','Feb 2025',2025,2,1,1136447,820000,15000,301447,59300000,42000000,1500000,15800000,3427,2945,482,57.79,3.016,119855,88000,4200,27655,105.5,339085,29.8,100,911299,798793,18411,4932,None,None,None,None,None,None,None,1),
@@ -59,21 +56,27 @@ def init_db():
         ('2026-02','Feb 2026',2026,2,1,1323024,955000,17000,351024,68027196,49000000,1700000,17327196,3621,3031,590,53.22,2.737,104076,75000,3700,25376,78.7,332278,11.91,0,None,None,None,None,523.71,4.41,4041859,15496,8908,6588,2401,0),
         ('2026-03','Mar 2026',2026,3,1,1515436,1100000,20000,395436,74473588,54000000,2000000,18473588,3975,3327,648,53.38,2.623,116286,84000,4200,28086,76.7,358898,11.27,240,None,None,None,None,617.83,4.73,5018374,15402,8884,6518,2399,0),
     ]
-    cols = 'id,label,yr,mo,qtr,production,dyeing_prod,sample_prod,washing_prod,energy_mj,dyeing_energy,sample_energy,washing_energy,carbon,scope1,scope2,carbon_intensity,carbon_per_kg,water,dyeing_water,sample_water,washing_water,water_intensity,solar,solar_pct,rainwater,ng,electricity,diesel,gasoline,egb,egb_pct,shipment,manpower,male_w,female_w,staffs,est'
-    placeholders = ','.join(['?']*len(cols.split(',')))
+    cols = ('id,label,yr,mo,qtr,production,dyeing_prod,sample_prod,washing_prod,'
+            'energy_mj,dyeing_energy,sample_energy,washing_energy,'
+            'carbon,scope1,scope2,carbon_intensity,carbon_per_kg,'
+            'water,dyeing_water,sample_water,washing_water,water_intensity,'
+            'solar,solar_pct,rainwater,ng,electricity,diesel,gasoline,'
+            'egb,egb_pct,shipment,manpower,male_w,female_w,staffs,est')
+    ph = ','.join(['?'] * len(cols.split(',')))
     for row in seed:
-        c.execute(f"INSERT OR IGNORE INTO monthly({cols}) VALUES({placeholders})", row)
-    # Seed workforce
+        c.execute(f"INSERT OR IGNORE INTO monthly({cols}) VALUES({ph})", row)
     for wrow in [
         ('2026-01','Jan 2026',2026,1,8899,6567,2326,92,245,178,89,62),
         ('2026-02','Feb 2026',2026,2,8908,6588,2310,91,212,163,76,55),
         ('2026-03','Mar 2026',2026,3,8884,6518,2308,91,198,151,68,48),
     ]:
-        c.execute("INSERT OR IGNORE INTO workforce(id,label,yr,mo,rmg_male,rmg_female,staff_male,staff_female,leave_male,leave_female,onboard_male,onboard_female) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", wrow)
+        c.execute(
+            "INSERT OR IGNORE INTO workforce(id,label,yr,mo,rmg_male,rmg_female,"
+            "staff_male,staff_female,leave_male,leave_female,onboard_male,onboard_female) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", wrow)
     conn.commit()
     conn.close()
 
-# ── Auth decorator ────────────────────────────────────────────────────────
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -82,7 +85,6 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Routes ─────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     return render_template('dashboard.html')
@@ -90,16 +92,16 @@ def index():
 @app.route('/api/data')
 def api_data():
     conn = get_db()
-    monthly = [dict(r) for r in conn.execute("SELECT * FROM monthly ORDER BY yr, mo").fetchall()]
+    monthly   = [dict(r) for r in conn.execute("SELECT * FROM monthly ORDER BY yr, mo").fetchall()]
     workforce = [dict(r) for r in conn.execute("SELECT * FROM workforce ORDER BY yr, mo").fetchall()]
-    brands = [dict(r) for r in conn.execute("SELECT * FROM brands").fetchall()]
+    brands    = [dict(r) for r in conn.execute("SELECT * FROM brands").fetchall()]
     conn.close()
     return jsonify({'monthly': monthly, 'workforce': workforce, 'brands': brands,
                     'auth': bool(session.get('ffl_auth'))})
 
 @app.route('/api/auth', methods=['POST'])
 def api_auth():
-    data = request.get_json()
+    data   = request.get_json(force=True)
     action = data.get('action')
     if action == 'login':
         if data.get('password') == EDIT_PASSWORD:
@@ -116,20 +118,21 @@ def api_auth():
 @app.route('/api/save/month', methods=['POST'])
 @require_auth
 def save_month():
-    d = request.get_json()
+    d = request.get_json(force=True)
     if not d.get('id'):
         return jsonify({'ok': False, 'msg': 'Missing id'})
     conn = get_db()
-    # Upsert
-    fields = ['label','yr','mo','qtr','production','dyeing_prod','sample_prod','washing_prod',
-              'energy_mj','dyeing_energy','sample_energy','washing_energy',
-              'carbon','scope1','scope2','carbon_intensity','carbon_per_kg',
-              'water','dyeing_water','sample_water','washing_water','water_intensity',
-              'solar','solar_pct','rainwater','ng','electricity','diesel','gasoline',
-              'egb','egb_pct','shipment','manpower','male_w','female_w','staffs','est']
+    fields = [
+        'label','yr','mo','qtr','production','dyeing_prod','sample_prod','washing_prod',
+        'energy_mj','dyeing_energy','sample_energy','washing_energy',
+        'carbon','scope1','scope2','carbon_intensity','carbon_per_kg',
+        'water','dyeing_water','sample_water','washing_water','water_intensity',
+        'solar','solar_pct','rainwater','ng','electricity','diesel','gasoline',
+        'egb','egb_pct','shipment','manpower','male_w','female_w','staffs','est'
+    ]
     conn.execute("INSERT OR IGNORE INTO monthly(id) VALUES(?)", (d['id'],))
     for f in fields:
-        if f in d and d[f] != '':
+        if f in d and d[f] is not None and d[f] != '':
             conn.execute(f"UPDATE monthly SET {f}=? WHERE id=?", (d[f], d['id']))
     conn.execute("UPDATE monthly SET ts=CURRENT_TIMESTAMP WHERE id=?", (d['id'],))
     conn.commit()
@@ -139,12 +142,13 @@ def save_month():
 @app.route('/api/save/workforce', methods=['POST'])
 @require_auth
 def save_workforce():
-    d = request.get_json()
+    d = request.get_json(force=True)
     conn = get_db()
-    conn.execute("""INSERT OR REPLACE INTO workforce
-        (id,label,yr,mo,rmg_male,rmg_female,staff_male,staff_female,
-         leave_male,leave_female,onboard_male,onboard_female,ts)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
+    conn.execute(
+        "INSERT OR REPLACE INTO workforce "
+        "(id,label,yr,mo,rmg_male,rmg_female,staff_male,staff_female,"
+        " leave_male,leave_female,onboard_male,onboard_female,ts) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
         (d['id'], d.get('label',''), d.get('yr',0), d.get('mo',0),
          d.get('rmg_male',0), d.get('rmg_female',0),
          d.get('staff_male',0), d.get('staff_female',0),
@@ -157,15 +161,18 @@ def save_workforce():
 @app.route('/api/save/brand', methods=['POST'])
 @require_auth
 def save_brand():
-    d = request.get_json()
+    d = request.get_json(force=True)
     conn = get_db()
-    conn.execute("UPDATE brands SET water_intensity=?,energy_intensity=?,carbon_per_kg=? WHERE bid=?",
-                 (d.get('water_intensity'), d.get('energy_intensity'), d.get('carbon_per_kg'), d['bid']))
+    conn.execute(
+        "UPDATE brands SET water_intensity=?,energy_intensity=?,carbon_per_kg=? WHERE bid=?",
+        (d.get('water_intensity'), d.get('energy_intensity'), d.get('carbon_per_kg'), d['bid']))
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
 
+# initialise on import (works with both gunicorn and direct run)
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
