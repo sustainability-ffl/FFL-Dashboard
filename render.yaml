@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ffl-sustainability
+    env: python
+    buildCommand: pip install -r requirements.txt && python -c "from app import init_db; init_db()"
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: EDIT_PASSWORD
+        value: FFL2030
+      - key: DB_PATH
+        value: ffl.db
